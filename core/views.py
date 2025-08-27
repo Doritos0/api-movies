@@ -20,9 +20,6 @@ def lista_peliculas (request):
         print("❤️ ", serializer)
 
         if serializer.is_valid():
-            serializer = PeliculaSerializer(data=request.data)
-
-        if serializer.is_valid():
             anio = serializer.validated_data['anio']
             director = serializer.validated_data['director']
 
@@ -82,9 +79,6 @@ def lista_usuarios (request):
     elif request.method == 'POST':
         serializer = UsuarioSerializer(data = request.data)
         print("❤️ ", serializer)
-
-        if serializer.is_valid():
-            serializer = UsuarioSerializer(data=request.data)
 
         if serializer.is_valid():
             user = serializer.validated_data['user']

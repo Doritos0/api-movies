@@ -4,6 +4,7 @@ from .serializers import PeliculaSerializer, UsuarioPeliculaSerializer, UsuarioS
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.decorators import api_view
+from django.contrib.auth.hashers import make_password, check_password
 
 # Create your views here.
 
@@ -77,28 +78,55 @@ def lista_usuarios (request):
         serializer = UsuarioSerializer(query, many = True)
         return Response(serializer.data)
     elif request.method == 'POST':
-        serializer = UsuarioSerializer(data = request.data)
-        print("❤️ ", serializer)
 
+        #HAGO UNA COPIA DEL REQUEST PARA TRABAJAR CON ESTOS DATOS SIN MANIPULAR LOS ORIGINALES
+        data= request.data.copy()
+        user = data.get('user')
+        password = data.get('password')
+
+        #LOS PRINTEO PARA VER QUE INFORMACION TIENEN
+        print(user)
+        print(password)
+
+        #IF PARA CORROBORAR QUE ES UN USUARIO NUEVO
+        if Usuario.objects.filter(user = user).exists():
+            return Response(
+                {"Error": "Este usuario ya existe"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if len(password) < 4 or len(password) > 30:
+            '''
+
+            RETURN RESPONSE MAL EJECUTADO (SINTAXIS ERRONEA)
+
+            return Response()(
+                {"Error":"Contraseña debe tener entre 4 y 30 caracteres"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            '''
+            return Response(
+                {"Error": "Contraseña debe tener entre 4 y 30 caracteres"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+
+        #CAMBIO EL PASSWORD ORIGINAL DE DATA YA HASHEADO
+
+        data['password'] = make_password(password)
+
+        #LO SERIALIZO
+        serializer = UsuarioSerializer(data = data)
+
+        #IF PARA GUARDAR EL NUEVO USUARIO
         if serializer.is_valid():
-            user = serializer.validated_data['user']
-
-            # Comprobar si ya existe película con mismo año y director
-            usuario_existe = Usuario.objects.filter(user=user).exists()
-
-            if usuario_existe:
-                return Response(
-                    {"error": "Este nombre de usuario ya esta en uso"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            else:
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     else:
-        return Response(serializer.data, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+
     
 @api_view(['GET','PATCH','DELETE'])
 def detalle_usuario (request, id):
@@ -191,3 +219,38 @@ def detalle_usuario_pelicula(request, id):
         # Elimina la relación usuario-película
         relacion.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+
+#ENDPOINT PARA LOGIN
+@api_view(['POST'])
+def login_usuario(request):
+    data = request.data.copy()
+    user = data.get('user')
+    password = data.get('password')
+
+    print("este user llega ", user)
+    print("este pass llega ", password)
+
+    if not user or not password:
+        return Response(
+            {"error": "Usuario y contraseña son requeridos"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        usuario = Usuario.objects.get(user=user)
+    except Usuario.DoesNotExist:
+        return Response(
+            {"error": "Usuario no existe"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Comparar contraseña con la almacenada (hash)
+    if check_password(password, usuario.password):
+        # Aquí podrías generar un token si quieres autenticación tipo JWT
+        return Response({"mensaje": f"Bienvenido {usuario.user}"}, status=status.HTTP_200_OK)
+    else:
+        return Response(
+            {"error": "Contraseña incorrecta"},
+            status=status.HTTP_401_UNAUTHORIZED
+        )

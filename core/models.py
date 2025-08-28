@@ -1,5 +1,5 @@
 from django.db import models
-from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator, MinLengthValidator
 
 # Create your models here.
 
@@ -20,6 +20,7 @@ class Usuario(models.Model):
     id_tipo = models.IntegerField(choices=tipo)
     id_usuario = models.AutoField(primary_key=True)
     user = models.CharField(max_length=25, unique=True)
+    password = models.CharField(max_length=150, validators=[MinLengthValidator(4)] )
     peliculas_vistas = models.ManyToManyField(
         Pelicula,
         through = 'UsuarioPelicula',

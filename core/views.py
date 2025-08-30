@@ -3,8 +3,15 @@ from .models import Pelicula, Usuario, UsuarioPelicula
 from .serializers import PeliculaSerializer, UsuarioPeliculaSerializer, UsuarioSerializer
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from django.contrib.auth.hashers import make_password, check_password
+from rest_framework.authtoken.models import Token
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.parsers import JSONParser
+from django.http import JsonResponse
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+from django.conf import settings
 
 # Create your views here.
 
@@ -158,6 +165,7 @@ def detalle_usuario (request, id):
 
 #TABLA INTERMEDIA
 @api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
 def lista_usuario_peliculas(request):
     if request.method == 'GET':
         query = UsuarioPelicula.objects.all()
@@ -195,6 +203,7 @@ def lista_usuario_peliculas(request):
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated])
 def detalle_usuario_pelicula(request, id):
     try:
         relacion = UsuarioPelicula.objects.get(id=id)
@@ -247,10 +256,90 @@ def login_usuario(request):
 
     # Comparar contraseña con la almacenada (hash)
     if check_password(password, usuario.password):
-        # Aquí podrías generar un token si quieres autenticación tipo JWT
-        return Response({"mensaje": f"Bienvenido {usuario.user}"}, status=status.HTTP_200_OK)
+        
+        refresh = RefreshToken.for_user(usuario)
+        access = refresh.access_token
+
+        print("REFRESCO ",refresh)
+        print("ACCESS ",access)
+
+
+        response = JsonResponse({
+            "mensaje": f"Bienvenido {usuario.user}",
+            "token" : str(refresh)
+        })
+
+        response.set_cookie(
+            key='refresh',
+            value=str(refresh),
+            httponly=True,
+            samesite='Strict', 
+            secure=False,
+            max_age=7*24*60*60         
+        )
+
+        # Opcional: también puedes mandar access token en cookie
+        response.set_cookie(
+            key='access',
+            value=str(access),
+            httponly=True,
+            samesite='Strict',
+            secure=False,
+            max_age=3600
+        )
+
+        return response
+
+        #return Response({
+            #"refresh": str(refresh),
+            #"access": str(access),
+            #"data": serializer.data}, status=status.HTTP_200_OK)
+
+
+        #return Response({"bienvenido"}, status=status.HTTP_200_OK)
     else:
         return Response(
             {"error": "Contraseña incorrecta"},
             status=status.HTTP_401_UNAUTHORIZED
         )
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def usuario_actual(request):
+    """
+    Devuelve el usuario logueado según el token enviado en cookies.
+    """
+    user = request.user  # JWTAuthentication ya asigna request.user
+    serializer = UsuarioSerializer(user)
+    return Response({"data": serializer.data})
+
+
+#ENDPOINTS PARA REFRESCO DE TOKENS
+@api_view(['POST'])
+def refresh_access(request):
+    """
+    Lee el refresh token desde la cookie 'refresh', genera un nuevo access token
+    y lo devuelve en cookie 'access'. Retorna 401 si el refresh es inválido.
+    """
+    refresh_token = request.COOKIES.get('refresh')
+    if not refresh_token:
+        return Response({"error": "Refresh token no encontrado"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        refresh = RefreshToken(refresh_token)
+        new_access = refresh.access_token
+
+        response = JsonResponse({"detail": "Access renovado"})
+        # Ponemos el nuevo access en cookie (ajusta secure/samesite según ambiente)
+        response.set_cookie(
+            key='access',
+            value=str(new_access),
+            httponly=True,
+            samesite='Strict',   # en dev puedes usar 'Lax' si da problemas
+            secure=False,
+            max_age=3600  # 1 hora por ejemplo
+        )
+        return response
+
+    except TokenError:
+        return Response({"error": "Refresh token inválido o expirado"}, status=status.HTTP_401_UNAUTHORIZED)

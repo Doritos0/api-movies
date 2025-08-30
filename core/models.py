@@ -1,8 +1,30 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator, MinLengthValidator
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 
-# Create your models here.
+# ------------------------
+# Manager personalizado
+# ------------------------
+class UsuarioManager(BaseUserManager):
+    def create_user(self, user, password=None, **extra_fields):
+        if not user:
+            raise ValueError("El campo 'user' es obligatorio")
 
+        usuario = self.model(user=user, **extra_fields)
+        usuario.set_password(password)   # <- encripta la contraseña
+        usuario.save(using=self._db)
+        return usuario
+
+    def create_superuser(self, user, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+
+        return self.create_user(user, password, **extra_fields)
+
+
+# ------------------------
+# Modelo Película
+# ------------------------
 class Pelicula(models.Model):
     id_pelicula = models.AutoField(primary_key=True)
     titulo = models.CharField(max_length=100)
@@ -11,26 +33,49 @@ class Pelicula(models.Model):
 
     def __str__(self):
         return self.titulo
-    
-class Usuario(models.Model):
+
+
+# ------------------------
+# Modelo Usuario (Custom)
+# ------------------------
+class Usuario(AbstractBaseUser, PermissionsMixin):
+    # campos de tu diseño original
     tipo = [
         (1, 'Admin'),
         (0, 'Usuario'),
     ]
-    id_tipo = models.IntegerField(choices=tipo)
-    id_usuario = models.AutoField(primary_key=True)
-    user = models.CharField(max_length=25, unique=True)
-    password = models.CharField(max_length=150, validators=[MinLengthValidator(4)] )
+    id = models.AutoField(primary_key=True)
+    id_tipo = models.IntegerField(choices=tipo, default=0)
+
+    user = models.CharField(max_length=25, unique=True)  # será el campo para login
+    email = models.EmailField(unique=True, null=True, blank=True)
+    nombre = models.CharField(max_length=100, null=True, blank=True)
+
+    # campos requeridos por Django
+    is_active = models.BooleanField(default=True)   # si el usuario está activo
+    is_staff = models.BooleanField(default=False)   # acceso al admin
+
+    # relación M2M con películas
     peliculas_vistas = models.ManyToManyField(
         Pelicula,
-        through = 'UsuarioPelicula',
-        related_name = 'vista_por'
+        through='UsuarioPelicula',
+        related_name='vista_por'
     )
- 
+
+    # manager
+    objects = UsuarioManager()
+
+    # configuración de login
+    USERNAME_FIELD = "user"   # usamos 'user' para iniciar sesión
+    REQUIRED_FIELDS = ["email"]  # se pedirá además el email al crear superusuarios
+
     def __str__(self):
         return self.user
 
 
+# ------------------------
+# Relación Usuario-Película
+# ------------------------
 class UsuarioPelicula(models.Model):
     id = models.AutoField(primary_key=True)
     estado = [
@@ -42,46 +87,11 @@ class UsuarioPelicula(models.Model):
     pelicula = models.ForeignKey(Pelicula, on_delete=models.CASCADE)
     puntuacion = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(0), MaxValueValidator(10)],
-        default=0)
+        default=0
+    )
     
     class Meta:
         unique_together = ('usuario', 'pelicula')
 
     def __str__(self):
-        return f"{self.usuario.user} - {self.pelicula.titulo} ({self.estado}, {self.puntuacion})"
-
-'''
-
-from django.db import models
-from django.core.exceptions import ValidationError
-import json
-
-# Create your models here.
-class TipoProducto(models.Model):
-    TipoProducto = [
-        ('Herramientas Manuales','Herramientas Manuales'),#1- Herramientas Manuales
-        ('Materiales Basicos', 'Materiales Basicos'),#2- Materiales Basicos
-        ('Equipo de Seguridad', 'Equipo de Seguridad'), #3- Equipo de Seguridad
-        ('Tornillos y Anclajes', 'Tornillos y Anclajes'), #4-Tornillos y Anclajes
-        ('Fijaciones y Adhesivos', 'Fijaciones y Adhesivos'), #5-Fijaciones y Adhesivos
-        ('Equipos de Medicion', 'Equipos de Medicion'), #6-Equipos de Medicion
-    ]
-    id_tipo = models.CharField(choices=TipoProducto, primary_key=True, max_length=50)
-
-    def __str__(self):
-        return self.id_tipo
-
- #   def __str__(self):
-    #    return str(self.tipo_nombre)
-
-
-class Producto(models.Model):
-    Oferta = [
-        (1, 'Si'),
-        (0, 'No'),
-    ]
-    id_producto = models.AutoField(primary_key=True)
-    nombre = models.CharField(max_length=25, unique=True)
-    oferta = models.IntegerField(choices=Oferta)
-    porcentaje = models.IntegerField(null=True, blank=True)
-    id_tipo = models.ForeignKey('TipoProducto', on_delete=models.CASCADE)'''
+        return f"{self.usuario.user} - {self.pelicula.titulo} ({self.estado_pelicula}, {self.puntuacion})"

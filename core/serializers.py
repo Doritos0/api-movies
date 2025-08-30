@@ -11,7 +11,7 @@ class PeliculaSerializer (serializers.ModelSerializer):
 class UsuarioSerializer (serializers.ModelSerializer):
     class Meta:
         model = Usuario
-        fields = '__all__' 
+        fields = ['id', 'user', 'id_tipo']
 
 
 class UsuarioPeliculaSerializer (serializers.ModelSerializer):

@@ -139,6 +139,8 @@ AUTH_USER_MODEL = "core.Usuario"
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-            'core.authentication.CookieJWTAuthentication',
-        ),
+        'core.authentication.CookieJWTAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
 }
+

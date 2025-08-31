@@ -233,6 +233,8 @@ def detalle_usuario_pelicula(request, id):
 #ENDPOINT PARA LOGIN
 @api_view(['POST'])
 def login_usuario(request):
+    
+
     data = request.data.copy()
     user = data.get('user')
     password = data.get('password')
@@ -263,11 +265,16 @@ def login_usuario(request):
         print("REFRESCO ",refresh)
         print("ACCESS ",access)
 
+        serializer = UsuarioSerializer(usuario)
+
 
         response = JsonResponse({
-            "mensaje": f"Bienvenido {usuario.user}",
-            "token" : str(refresh)
+            "data": serializer.data
         })
+
+        
+        response.delete_cookie("access")
+        response.delete_cookie("refresh")
 
         response.set_cookie(
             key='refresh',
@@ -343,3 +350,11 @@ def refresh_access(request):
 
     except TokenError:
         return Response({"error": "Refresh token inválido o expirado"}, status=status.HTTP_401_UNAUTHORIZED)
+    
+
+@api_view(["POST"])
+def logout(request):
+    response = Response({"detail": "Logout exitoso"})
+    response.delete_cookie("access")
+    response.delete_cookie("refresh")
+    return response
